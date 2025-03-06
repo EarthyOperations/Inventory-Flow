@@ -215,7 +215,7 @@ const sendEmail = async (filePath) => {
 };
 
 // Schedule task to run at 6 PM every day
-cron.schedule("0 16 * * *", () => {
+cron.schedule("15 10 * * *", () => {
     console.log("⏳ Running scheduled task: Fetching multi-location inventory & sending email...");
     getInventory();
 }, {
