@@ -2,7 +2,7 @@ name: Daily Inventory Report
 
 on:
   schedule:
-    - cron: "15 10 * * *"  # Runs at 6 PM IST (12:30 PM UTC)
+    - cron: "23 10 * * *"  # Runs at 6 PM IST (12:30 PM UTC)
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
