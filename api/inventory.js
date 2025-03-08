@@ -166,8 +166,8 @@ const getInventory = async () => {
 
         // Convert to CSV format
         const csvContent = [
-            ["Location Name", "Product Name", "Inventory Item ID", "Available", "Updated At"],
-            ...allInventoryData.map(row => [row.Location_Name, row.Product_Name, row.Inventory_Item_ID, row.Available <= 5 ? `LOW STOCK (${row.Available})` : row.Available, row.Updated_At])
+            ["Location Name", "Product Name", "Available", "Updated At"],
+            ...allInventoryData.map(row => [row.Location_Name, row.Product_Name, row.Available <= 10 ? `LOW STOCK (${row.Available})` : row.Available, row.Updated_At])
         ].map(e => e.join(",")).join("\n");
 
         // Save as CSV file
