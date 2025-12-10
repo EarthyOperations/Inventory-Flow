@@ -8,7 +8,7 @@ const SHOPIFY_STORE = process.env.SHOPIFY_STORE;
 const ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
-const TO_EMAIL = process.env.TO_EMAIL;
+const TO_EMAIL = process.env.TO_EMAIL; 
 
 const products = {
     "FMAMBR001": "Classic Chicken Broth",
