@@ -147,129 +147,99 @@ const getInventory = async () => {
     const location = await getCentralWarehouseLocation();
     if (!location) return;
 
-    console.log(`📦 Fetching inventory for ${location.name}`);
-
-    const inventoryResponse = await axios.get(
+    const inventoryRes = await axios.get(
       `https://${SHOPIFY_STORE}.myshopify.com/admin/api/2025-01/locations/${location.id}/inventory_levels.json`,
       {
         headers: {
           "X-Shopify-Access-Token": ACCESS_TOKEN,
-          "Accept": "application/json",
         },
       }
     );
 
-    const inventoryLevels = inventoryResponse.data.inventory_levels;
+    const inventoryLevels = inventoryRes.data.inventory_levels;
+
     if (!inventoryLevels.length) {
-      console.log("⚠️ No inventory found");
+      console.log("⚠️ No inventory at this location");
       return;
     }
 
-    const inventoryItemIds = inventoryLevels
-      .map(i => i.inventory_item_id)
-      .join(",");
-
-    /** STEP 1: inventory_item → variant */
-    const inventoryItemsRes = await axios.get(
-      `https://${SHOPIFY_STORE}.myshopify.com/admin/api/2025-01/inventory_items.json?ids=${inventoryItemIds}`,
-      {
-        headers: {
-          "X-Shopify-Access-Token": ACCESS_TOKEN,
-          "Accept": "application/json",
-        },
-      }
-    );
-
-    const inventoryItems = inventoryItemsRes.data.inventory_items;
-
-    /** STEP 2: variant → product */
-    const variantIds = inventoryItems
-      .map(i => i.variant_id)
-      .filter(Boolean)
-      .join(",");
-
-    const variantsRes = await axios.get(
-      `https://${SHOPIFY_STORE}.myshopify.com/admin/api/2025-01/variants.json?ids=${variantIds}`,
-      {
-        headers: {
-          "X-Shopify-Access-Token": ACCESS_TOKEN,
-          "Accept": "application/json",
-        },
-      }
-    );
-
-    const variants = variantsRes.data.variants;
-
-    const productIds = [...new Set(variants.map(v => v.product_id))].join(",");
-
+    /** 1️⃣ Fetch ACTIVE + LISTED products ONLY */
     const productsRes = await axios.get(
-      `https://${SHOPIFY_STORE}.myshopify.com/admin/api/2025-01/products.json?ids=${productIds}`,
+      `https://${SHOPIFY_STORE}.myshopify.com/admin/api/2025-01/products.json`,
       {
         headers: {
           "X-Shopify-Access-Token": ACCESS_TOKEN,
-          "Accept": "application/json",
+        },
+        params: {
+          status: "active",
+          limit: 250,
         },
       }
     );
 
-    const shopifyProducts = productsRes.data.products;
+    const activeProducts = productsRes.data.products.filter(p =>
+      p.tags
+        .split(",")
+        .map(t => t.trim().toLowerCase())
+        .includes("listed")
+    );
 
-    /** FINAL FILTER */
-    const finalData = inventoryLevels
-      .map(level => {
-        const invItem = inventoryItems.find(i => i.id === level.inventory_item_id);
-        const variant = variants.find(v => v.id === invItem?.variant_id);
-        const product = shopifyProducts.find(p => p.id === variant?.product_id);
+    /** 2️⃣ Map inventory_item_id → product */
+    const inventoryMap = [];
 
-        if (
-          !product ||
-          product.status !== "active" ||
-          !product.tags.split(",").map(t => t.trim()).includes("listed")
-        ) {
-          return null;
-        }
+    for (const product of activeProducts) {
+      for (const variant of product.variants) {
+        const level = inventoryLevels.find(
+          i => i.inventory_item_id === variant.inventory_item_id
+        );
 
-        return {
+        if (!level) continue;
+
+        inventoryMap.push({
           Location_Name: location.name,
-          Product_Name: products[invItem.sku] || product.title,
-          Available: level.available,
+          Product_Name: products[variant.sku] || product.title,
+          Available:
+            level.available <= 10
+              ? `LOW STOCK (${level.available})`
+              : level.available,
           Updated_At: new Date(level.updated_at).toLocaleString("en-IN", {
             timeZone: "Asia/Kolkata",
           }),
-        };
-      })
-      .filter(Boolean);
+        });
+      }
+    }
 
-    if (!finalData.length) {
-      console.log("⚠️ No active + listed products found");
+    if (!inventoryMap.length) {
+      console.log("❌ No active + listed products found");
       return;
     }
 
-    /** CSV */
+    /** 3️⃣ CSV */
     const csvContent = [
       ["Location Name", "Product Name", "Available", "Updated At"],
-      ...finalData.map(row => [
-        row.Location_Name,
-        row.Product_Name,
-        row.Available <= 10
-          ? `LOW STOCK (${row.Available})`
-          : row.Available,
-        row.Updated_At,
+      ...inventoryMap.map(r => [
+        r.Location_Name,
+        r.Product_Name,
+        r.Available,
+        r.Updated_At,
       ]),
     ]
-      .map(e => e.join(","))
+      .map(row => row.join(","))
       .join("\n");
 
-    const filePath = "inventory_report.csv";
-    fs.writeFileSync(filePath, csvContent);
+    fs.writeFileSync("inventory_report.csv", csvContent);
 
     console.log("✅ Inventory CSV generated");
-    await sendEmail(filePath);
+    await sendEmail("inventory_report.csv");
 
   } catch (error) {
-    console.error("❌ Inventory error:", error.response?.data || error.message);
+    console.error(
+      "❌ Inventory error:",
+      error.response?.data || error.message
+    );
   }
 };
+
 
 // Function to send email
 const sendEmail = async (filePath) => {
